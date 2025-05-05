@@ -1,0 +1,32 @@
+# --- Build Stage ---
+    FROM golang:1.21-alpine AS builder
+
+    WORKDIR /build
+    
+    # Copy go mod and sum files and download dependencies first
+    # This leverages Docker layer caching
+    COPY go.mod go.sum ./
+    RUN go mod download
+    
+    # Copy the rest of the application source code
+    COPY . .
+    
+    # Build the Go application
+    # -ldflags="-w -s" creates a smaller binary by removing debug info
+    # CGO_ENABLED=0 ensures a static binary (useful for alpine)
+    RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /paycor-app main.go
+    
+    
+    # --- Runtime Stage ---
+    FROM alpine:latest
+    
+    WORKDIR /app
+    
+    # Copy only the compiled binary from the build stage
+    COPY --from=builder /paycor-app /app/paycor-app
+    
+    # Expose the port the Go application listens on (must match main.go)
+    EXPOSE 8080
+    
+    # Command to run the application
+    CMD ["/app/paycor-app"]
